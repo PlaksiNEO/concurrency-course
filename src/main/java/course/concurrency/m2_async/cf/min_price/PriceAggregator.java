@@ -1,11 +1,19 @@
 package course.concurrency.m2_async.cf.min_price;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 public class PriceAggregator {
 
     private PriceRetriever priceRetriever = new PriceRetriever();
+
+    private ExecutorService executor = Executors.newCachedThreadPool();
 
     public void setPriceRetriever(PriceRetriever priceRetriever) {
         this.priceRetriever = priceRetriever;
@@ -18,7 +26,18 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
-        // здесь будет ваш код
-        return 0;
+
+        List<Future<Double>> actions = shopIds.stream().map(shopId -> executor.submit(() -> priceRetriever.getPrice(itemId, shopId))).collect(Collectors.toList());
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {}
+        return actions.stream().filter(it -> it.isDone()).mapToDouble(it -> {
+            try {
+                return it.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException("Это никогда не свалится");
+            }
+        }).min().orElse(0);
+
     }
 }
