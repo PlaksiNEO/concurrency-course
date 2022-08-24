@@ -1,12 +1,9 @@
 package course.concurrency.m2_async.cf.min_price;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class PriceAggregator {
@@ -27,17 +24,22 @@ public class PriceAggregator {
 
     public double getMinPrice(long itemId) {
 
-        List<Future<Double>> actions = shopIds.stream().map(shopId -> executor.submit(() -> priceRetriever.getPrice(itemId, shopId))).collect(Collectors.toList());
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {}
-        return actions.stream().filter(it -> it.isDone()).mapToDouble(it -> {
-            try {
-                return it.get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException("Это никогда не свалится");
-            }
-        }).min().orElse(0);
+        final SortedSet<Double> synchronizedDoubleSet = Collections.synchronizedSortedSet(new TreeSet<>());
+        List<CompletableFuture<Double>> actions = shopIds.stream()
+            .map(shopId -> CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor))
+            .peek(it -> it.thenAcceptAsync(synchronizedDoubleSet::add)).collect(Collectors.toList());
 
+        try {
+            //Тут не получается задать 3000, т.к. последующая операция занимает определённое кол-во мс :((
+            Thread.sleep(2950);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        actions.forEach(it -> it.complete(Double.MAX_VALUE));
+        if( synchronizedDoubleSet.isEmpty()) {
+            return Double.NaN;
+        }
+            return synchronizedDoubleSet.first();
     }
 }

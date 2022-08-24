@@ -76,7 +76,7 @@ public class PriceAggregatorTests {
         double min = priceAggregator.getMinPrice(15L);
         long end = System.currentTimeMillis();
 
-        assertEquals(min, expectedMin);
+        assertEquals(expectedMin, min);
         assertTrue((end - start) < SLA);
     }
 
