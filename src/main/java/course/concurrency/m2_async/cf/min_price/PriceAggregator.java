@@ -2,8 +2,6 @@ package course.concurrency.m2_async.cf.min_price;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class PriceAggregator {
@@ -23,23 +21,19 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
+        final Set<CompletableFuture<Double>> futuresSet = shopIds.stream()
+                .map(shopId -> CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor)
+                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS)).collect(Collectors.toSet());
 
-        final SortedSet<Double> synchronizedDoubleSet = Collections.synchronizedSortedSet(new TreeSet<>());
-        List<CompletableFuture<Double>> actions = shopIds.stream()
-            .map(shopId -> CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor))
-            .peek(it -> it.thenAcceptAsync(synchronizedDoubleSet::add)).collect(Collectors.toList());
-
-        try {
-            //Тут не получается задать 3000, т.к. последующая операция занимает определённое кол-во мс :((
-            Thread.sleep(2950);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        actions.forEach(it -> it.complete(Double.MAX_VALUE));
-        if( synchronizedDoubleSet.isEmpty()) {
-            return Double.NaN;
-        }
-            return synchronizedDoubleSet.first();
+        return futuresSet.stream()
+                .map(it -> {
+                    try {
+                        return it.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        return Double.MAX_VALUE;
+                    }
+                })
+                .min(Double::compareTo)
+                .orElse(Double.NaN);
     }
 }
