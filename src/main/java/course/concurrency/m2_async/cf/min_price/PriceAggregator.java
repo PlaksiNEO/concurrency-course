@@ -23,16 +23,11 @@ public class PriceAggregator {
     public double getMinPrice(long itemId) {
         final Set<CompletableFuture<Double>> futuresSet = shopIds.stream()
                 .map(shopId -> CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor)
-                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS)).collect(Collectors.toSet());
+                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS).exceptionally((ex) -> Double.NaN))
+                .collect(Collectors.toSet());
 
         return futuresSet.stream()
-                .map(it -> {
-                    try {
-                        return it.get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        return Double.MAX_VALUE;
-                    }
-                })
+                .map(CompletableFuture::join)
                 .min(Double::compareTo)
                 .orElse(Double.NaN);
     }
